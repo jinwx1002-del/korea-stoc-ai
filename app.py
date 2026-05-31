@@ -3,6 +3,8 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import feedparser
+import sqlite3
+from datetime import datetime
 from urllib.parse import quote
 
 st.set_page_config(
@@ -73,7 +75,165 @@ KO_NEGATIVE_WORDS = [
 st.title("📈 文星AI交易系统 Pro")
 st.caption("V3.0｜技术指标｜成交量｜韩文新闻｜英文新闻｜手动新闻｜风险雷达｜仓位管理")
 st.warning("本系统仅供参考，不构成投资建议。股市有风险，操作需谨慎。")
+DB_NAME = "wenxing_predictions.db"
 
+
+def init_db():
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS predictions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT,
+            stock_name TEXT,
+            ticker TEXT,
+            current_price REAL,
+            final_score REAL,
+            risk_level TEXT,
+            position_suggestion TEXT,
+            today_mid REAL,
+            today_low REAL,
+            today_high REAL,
+            next_mid REAL,
+            next_low REAL,
+            next_high REAL,
+            actual_close REAL,
+            error_rate REAL
+        )
+    """)
+
+    conn.commit()
+    conn.close()
+
+
+def save_prediction(
+    stock_name,
+    ticker,
+    current_price,
+    final_score,
+    risk_level_value,
+    position_value,
+    today_mid,
+    today_low,
+    today_high,
+    next_mid,
+    next_low,
+    next_high
+):
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT INTO predictions (
+            created_at,
+            stock_name,
+            ticker,
+            current_price,
+            final_score,
+            risk_level,
+            position_suggestion,
+            today_mid,
+            today_low,
+            today_high,
+            next_mid,
+            next_low,
+            next_high,
+            actual_close,
+            error_rate
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        stock_name,
+        ticker,
+        current_price,
+        final_score,
+        risk_level_value,
+        position_value,
+        today_mid,
+        today_low,
+        today_high,
+        next_mid,
+        next_low,
+        next_high,
+        None,
+        None
+    ))
+
+    conn.commit()
+    conn.close()
+
+
+def load_predictions(limit=20):
+    conn = sqlite3.connect(DB_NAME)
+    df = pd.read_sql_query(
+        f"""
+        SELECT
+            id,
+            created_at,
+            stock_name,
+            ticker,
+            current_price,
+            final_score,
+            risk_level,
+            position_suggestion,
+            today_mid,
+            today_low,
+            today_high,
+            next_mid,
+            next_low,
+            next_high,
+            actual_close,
+            error_rate
+        FROM predictions
+        ORDER BY id DESC
+        LIMIT {limit}
+        """,
+        conn
+    )
+    conn.close()
+    return df
+
+
+def update_actual_price(record_id, actual_close):
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "SELECT today_mid FROM predictions WHERE id = ?",
+        (record_id,)
+    )
+    row = cursor.fetchone()
+
+    if row is None:
+        conn.close()
+        return False
+
+    predicted_mid = row[0]
+
+    if predicted_mid and predicted_mid > 0:
+        error_rate = abs(actual_close - predicted_mid) / predicted_mid * 100
+    else:
+        error_rate = None
+
+    cursor.execute("""
+        UPDATE predictions
+        SET actual_close = ?, error_rate = ?
+        WHERE id = ?
+    """, (
+        actual_close,
+        error_rate,
+        record_id
+    ))
+
+    conn.commit()
+    conn.close()
+
+    return True
+
+
+init_db()
 
 def safe_float(value):
     if isinstance(value, pd.Series):
@@ -482,7 +642,23 @@ if st.button("开始分析"):
         manual_news_score, manual_good, manual_risk = score_text(manual_news)
 
         result = final_prediction(df, auto_news_score, manual_news_score)
+        current_risk_level = risk_level(result["final_score"])
+        current_position = position_suggestion(result["final_score"])
 
+        save_prediction(
+            display_name,
+            ticker,
+            result["close"],
+            result["final_score"],
+            current_risk_level,
+            current_position,
+            result["today_mid"],
+            result["today_low"],
+            result["today_high"],
+            result["next_mid"],
+            result["next_low"],
+            result["next_high"]
+        )
         good_sources = result["good_sources"] + auto_good + manual_good
         risk_sources = result["risk_sources"] + auto_risk + manual_risk
 
@@ -491,8 +667,8 @@ if st.button("开始分析"):
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("当前价格", f"{result['close']:,} 韩元")
         c2.metric("综合评分", f"{result['final_score']} / 100")
-        c3.metric("风险等级", risk_level(result["final_score"]))
-        c4.metric("建议仓位", position_suggestion(result["final_score"]))
+        c3.metric("风险等级", current_risk_level)
+        c4.metric("建议仓位", current_position)
 
         st.markdown(f"## {trend_text(result['final_score'])}")
 
@@ -575,4 +751,34 @@ if st.button("开始分析"):
                 st.write(f"- {title}")
 
         st.markdown("### 📈 最近60日走势")
-        st.line_chart(df["Close"].tail(60))
+        st.line_chart(df["Close"].tail(60))st.markdown("---")
+st.markdown("## 📚 复盘中心 V3.5")
+
+records = load_predictions(20)
+
+if records.empty:
+    st.info("暂无预测记录。每次点击开始分析后，系统会自动保存一次预测。")
+else:
+    st.dataframe(records, use_container_width=True)
+
+    st.markdown("### ✍️ 手动输入实际收盘价")
+
+    record_id = st.number_input(
+        "输入要复盘的记录ID",
+        min_value=1,
+        step=1
+    )
+
+    actual_close = st.number_input(
+        "输入实际收盘价",
+        min_value=0,
+        step=1000
+    )
+
+    if st.button("保存复盘结果"):
+        ok = update_actual_price(record_id, actual_close)
+
+        if ok:
+            st.success("复盘结果已保存。刷新页面后可查看误差率。")
+        else:
+            st.error("没有找到这个记录ID。")
