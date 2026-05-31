@@ -95,4 +95,35 @@ st.caption(
 
 st.warning(
     "本系统仅供参考，不构成投资建议。股市有风险，投资需谨慎。"
-)
+)# ===== 工具函数 =====
+
+def safe_float(value):
+    if isinstance(value, pd.Series):
+        return float(value.iloc[0])
+    if isinstance(value, np.ndarray):
+        return float(value.flatten()[0])
+    return float(value)
+
+def get_stock_data(ticker):
+
+    df = yf.download(
+        ticker,
+        period="6mo",
+        interval="1d",
+        auto_adjust=False,
+        progress=False
+    )
+
+    if df.empty:
+        return None
+
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+
+    return df.dropna()
+
+
+def add_indicators(df):
+
+    df["MA5"] = df["Close"].rolling(5).mean()
+    df["MA20"] = df["Close"].rolling(20).
