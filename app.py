@@ -319,7 +319,121 @@ def score_text(text):
     score = max(-25, min(25, score))
 
     return score, list(set(positive_hits))[:10], list(set(negative_hits))[:10]
+def get_global_market_factors():
+    """
+    全球市场因子：
+    NVDA、MU、NASDAQ、SOX、USD/KRW、Fed新闻、Trump新闻
+    """
+    factors = []
+    total_score = 0
 
+    tickers = {
+        "NVDA 英伟达": "NVDA",
+        "MU 美光": "MU",
+        "NASDAQ 纳斯达克": "^IXIC",
+        "SOX 半导体指数": "^SOX",
+        "USD/KRW 美元韩元": "KRW=X",
+    }
+
+    for name, symbol in tickers.items():
+        try:
+            df = yf.download(
+                symbol,
+                period="5d",
+                interval="1d",
+                auto_adjust=False,
+                progress=False
+            )
+
+            if df is None or df.empty or len(df) < 2:
+                factors.append((name, 0, "数据不足"))
+                continue
+
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = df.columns.get_level_values(0)
+
+            last_close = safe_float(df["Close"].iloc[-1])
+            prev_close = safe_float(df["Close"].iloc[-2])
+
+            change = (last_close - prev_close) / prev_close * 100
+
+            score = 0
+            comment = f"{change:.2f}%"
+
+            if symbol in ["NVDA", "MU"]:
+                if change >= 5:
+                    score = 10
+                elif change >= 2:
+                    score = 7
+                elif change > 0:
+                    score = 3
+                elif change <= -5:
+                    score = -10
+                elif change <= -2:
+                    score = -7
+                else:
+                    score = -3
+
+            elif symbol in ["^IXIC", "^SOX"]:
+                if change >= 2:
+                    score = 8
+                elif change >= 1:
+                    score = 5
+                elif change > 0:
+                    score = 2
+                elif change <= -2:
+                    score = -8
+                elif change <= -1:
+                    score = -5
+                else:
+                    score = -2
+
+            elif symbol == "KRW=X":
+                # KRW=X 上涨 = 1美元兑换更多韩元 = 韩元贬值
+                # 对韩国出口股通常偏利好，但过快上涨也代表风险
+                if 0 < change <= 1:
+                    score = 3
+                elif 1 < change <= 2:
+                    score = 1
+                elif change > 2:
+                    score = -3
+                elif change < -1:
+                    score = -2
+                else:
+                    score = 0
+
+            total_score += score
+            factors.append((name, score, comment))
+
+        except Exception:
+            factors.append((name, 0, "读取失败"))
+
+    # Fed 新闻
+    fed_titles = get_google_news("Federal Reserve Powell interest rate stock market", language="en")
+    fed_text = " ".join(fed_titles)
+    fed_score_raw, fed_good, fed_risk = score_text(fed_text)
+
+    fed_score = max(-8, min(8, fed_score_raw))
+    total_score += fed_score
+    factors.append(("Fed 美联储新闻", fed_score, "、".join(fed_good[:3] + fed_risk[:3]) if fed_titles else "无新闻"))
+
+    # Trump 新闻
+    trump_titles = get_google_news("Trump tariff semiconductor chips stock market", language="en")
+    trump_text = " ".join(trump_titles)
+    trump_score_raw, trump_good, trump_risk = score_text(trump_text)
+
+    trump_score = max(-8, min(8, trump_score_raw))
+    total_score += trump_score
+    factors.append(("Trump 特朗普政策", trump_score, "、".join(trump_good[:3] + trump_risk[:3]) if trump_titles else "无新闻"))
+
+    total_score = max(-30, min(30, total_score))
+
+    return {
+        "score": total_score,
+        "factors": factors,
+        "fed_titles": fed_titles[:5],
+        "trump_titles": trump_titles[:5],
+    }
 
 def get_google_news(query, language="ko"):
     titles = []
@@ -453,7 +567,7 @@ def volume_score(df):
     return score, f"{ratio:.2f}倍", good, risk
 
 
-def final_prediction(df, news_score, manual_score):
+def final_prediction(df, news_score, manual_score, global_score):
     latest = df.iloc[-1]
 
     close = safe_float(latest["Close"])
@@ -462,7 +576,7 @@ def final_prediction(df, news_score, manual_score):
     tech, good_t, risk_t = technical_score(df)
     vol_score, vol_ratio, good_v, risk_v = volume_score(df)
 
-    final_score = tech + vol_score + news_score + manual_score
+    final_score = tech + vol_score + news_score + manual_score + global_score
     final_score = max(0, min(100, final_score))
 
     today_change = (final_score - 50) / 1200
@@ -479,6 +593,7 @@ def final_prediction(df, news_score, manual_score):
         "volume_score": round(vol_score),
         "news_score": round(news_score),
         "manual_score": round(manual_score),
+        "global_score": round(global_score),
         "final_score": round(final_score),
         "today_mid": round(today_mid),
         "today_low": round(today_mid * (1 - price_range)),
@@ -640,8 +755,10 @@ if st.button("开始分析"):
         all_auto_news = " ".join(yf_titles + ko_titles + en_titles)
         auto_news_score, auto_good, auto_risk = score_text(all_auto_news)
         manual_news_score, manual_good, manual_risk = score_text(manual_news)
+        global_result = get_global_market_factors()
+global_score = global_result["score"]
 
-        result = final_prediction(df, auto_news_score, manual_news_score)
+        result = final_prediction(df, auto_news_score, manual_news_score, global_score)
         current_risk_level = risk_level(result["final_score"])
         current_position = position_suggestion(result["final_score"])
 
@@ -673,11 +790,12 @@ if st.button("开始分析"):
         st.markdown(f"## {trend_text(result['final_score'])}")
 
         st.markdown("### 📊 评分拆解")
-        s1, s2, s3, s4 = st.columns(4)
-        s1.metric("技术评分", f"{result['tech_score']} / 100")
-        s2.metric("成交量影响", f"{result['volume_score']:+d}")
-        s3.metric("自动新闻影响", f"{result['news_score']:+d}")
-        s4.metric("手动新闻影响", f"{result['manual_score']:+d}")
+        s1, s2, s3, s4, s5 = st.columns(5)
+s1.metric("技术评分", f"{result['tech_score']} / 100")
+s2.metric("成交量影响", f"{result['volume_score']:+d}")
+s3.metric("自动新闻影响", f"{result['news_score']:+d}")
+s4.metric("手动新闻影响", f"{result['manual_score']:+d}")
+s5.metric("全球市场影响", f"{result['global_score']:+d}")
 
         st.markdown("### 📅 当天价格预测")
         t1, t2, t3 = st.columns(3)
@@ -691,7 +809,24 @@ if st.button("开始分析"):
         n2.metric("预测低点", f"{result['next_low']:,}")
         n3.metric("预测高点", f"{result['next_high']:,}")
 
-        st.markdown("### 🧠 文星AI总结")
+        st.markdown("### 🧠 文星AI总结")st.markdown("### 🌍 全球市场影响因子")
+
+for name, score, comment in global_result["factors"]:
+    if score > 0:
+        st.success(f"{name}：{score:+d}｜{comment}")
+    elif score < 0:
+        st.warning(f"{name}：{score:+d}｜{comment}")
+    else:
+        st.info(f"{name}：{score:+d}｜{comment}")
+
+with st.expander("查看 Fed / Trump 新闻标题"):
+    st.write("Fed 美联储新闻")
+    for title in global_result["fed_titles"]:
+        st.write(f"- {title}")
+
+    st.write("Trump 特朗普新闻")
+    for title in global_result["trump_titles"]:
+        st.write(f"- {title}")
         st.success(ai_summary(result["final_score"], risk_sources, good_sources))
 
         st.markdown("### ✅ 最大利好来源 TOP5")
