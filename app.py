@@ -10,7 +10,24 @@ st.set_page_config(
     page_icon="📈",
     layout="centered"
 )
-
+st.markdown("""
+<style>
+.main {
+    background-color:#0E1117;
+}
+.stMetric {
+    background-color:#1E222D;
+    padding:15px;
+    border-radius:12px;
+}
+div[data-testid="stMetric"] {
+    background:#1E222D;
+    border:1px solid #333;
+    padding:15px;
+    border-radius:15px;
+}
+</style>
+""", unsafe_allow_html=True)
 COMMON_STOCKS = {
     "SK海力士": {
         "ticker": "000660.KS",
