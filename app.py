@@ -16,8 +16,17 @@ STOCKS = {
 }
 
 st.title("📈 韩股AI预测助手")
-st.caption("手机版 V1.0｜适合海力士、三星电子、三星电机短线参考")
+st.caption("手机版 V1.1｜适合海力士、三星电子、三星电机短线参考")
 st.warning("结果仅供参考，不构成投资建议。股市有风险，操作需谨慎。")
+
+
+def safe_float(value):
+    """把 yfinance 返回的各种格式安全转成普通数字"""
+    if isinstance(value, pd.Series):
+        return float(value.iloc[0])
+    if isinstance(value, np.ndarray):
+        return float(value.flatten()[0])
+    return float(value)
 
 
 def get_stock_data(ticker):
@@ -31,6 +40,9 @@ def get_stock_data(ticker):
 
     if df.empty:
         return None
+
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
 
     df = df.dropna()
     return df
@@ -54,19 +66,20 @@ def add_indicators(df):
     df["RETURN"] = df["Close"].pct_change()
     df["VOLATILITY"] = df["RETURN"].rolling(20).std()
 
+    df = df.dropna()
     return df
 
 
 def make_prediction(df):
     latest = df.iloc[-1]
 
-    close = float(latest["Close"])
-    ma5 = float(latest["MA5"])
-    ma20 = float(latest["MA20"])
-    rsi = float(latest["RSI"])
-    macd = float(latest["MACD"])
-    macd_signal = float(latest["MACD_SIGNAL"])
-    volatility = float(latest["VOLATILITY"])
+    close = safe_float(latest["Close"])
+    ma5 = safe_float(latest["MA5"])
+    ma20 = safe_float(latest["MA20"])
+    rsi = safe_float(latest["RSI"])
+    macd = safe_float(latest["MACD"])
+    macd_signal = safe_float(latest["MACD_SIGNAL"])
+    volatility = safe_float(latest["VOLATILITY"])
 
     score = 50
 
@@ -189,50 +202,54 @@ if st.button("开始分析"):
     with st.spinner("正在获取行情并分析..."):
         df = get_stock_data(ticker)
 
-        if df is None:
+        if df is None or df.empty:
             st.error("行情数据获取失败，请稍后再试。")
         else:
             df = add_indicators(df)
-            result = make_prediction(df)
 
-            st.subheader(f"{stock_name} 分析结果")
+            if df.empty:
+                st.error("数据不足，无法计算指标。")
+            else:
+                result = make_prediction(df)
 
-            st.metric("当前价格", f"{result['close']:,} 韩元")
-            st.metric("趋势评分", f"{result['score']} / 100")
-            st.metric("趋势判断", result["trend"])
+                st.subheader(f"{stock_name} 分析结果")
 
-            st.markdown("### 明日价格预测")
-            col1, col2, col3 = st.columns(3)
-            col1.metric("预测中位价", f"{result['predicted_price']:,}")
-            col2.metric("预测低点", f"{result['predicted_low']:,}")
-            col3.metric("预测高点", f"{result['predicted_high']:,}")
+                st.metric("当前价格", f"{result['close']:,} 韩元")
+                st.metric("趋势评分", f"{result['score']} / 100")
+                st.metric("趋势判断", result["trend"])
 
-            st.markdown("### 技术指标")
-            st.write(f"5日均线：{result['ma5']:,}")
-            st.write(f"20日均线：{result['ma20']:,}")
-            st.write(f"RSI：{result['rsi']}")
+                st.markdown("### 明日价格预测")
+                col1, col2, col3 = st.columns(3)
+                col1.metric("预测中位价", f"{result['predicted_price']:,}")
+                col2.metric("预测低点", f"{result['predicted_low']:,}")
+                col3.metric("预测高点", f"{result['predicted_high']:,}")
 
-            if quantity > 0 and cost_price > 0:
-                advice = get_advice(
-                    result["close"],
-                    cost_price,
-                    quantity,
-                    result["score"]
-                )
+                st.markdown("### 技术指标")
+                st.write(f"5日均线：{result['ma5']:,}")
+                st.write(f"20日均线：{result['ma20']:,}")
+                st.write(f"RSI：{result['rsi']}")
 
-                st.markdown("### 我的持仓建议")
-                st.metric("买入成本", f"{advice['total_cost']:,} 韩元")
-                st.metric("当前市值", f"{advice['total_value']:,} 韩元")
-                st.metric("当前盈亏", f"{advice['profit']:,} 韩元")
-                st.metric("收益率", f"{advice['profit_rate']}%")
+                if quantity > 0 and cost_price > 0:
+                    advice = get_advice(
+                        result["close"],
+                        cost_price,
+                        quantity,
+                        result["score"]
+                    )
 
-                st.markdown(f"## {advice['signal']}")
-                st.info(advice["advice"])
+                    st.markdown("### 我的持仓建议")
+                    st.metric("买入成本", f"{advice['total_cost']:,} 韩元")
+                    st.metric("当前市值", f"{advice['total_value']:,} 韩元")
+                    st.metric("当前盈亏", f"{advice['profit']:,} 韩元")
+                    st.metric("收益率", f"{advice['profit_rate']}%")
 
-                st.markdown("### 参考价位")
-                st.write(f"止损参考：{advice['stop_loss']:,} 韩元")
-                st.write(f"第一止盈：{advice['take_profit_1']:,} 韩元")
-                st.write(f"第二止盈：{advice['take_profit_2']:,} 韩元")
+                    st.markdown(f"## {advice['signal']}")
+                    st.info(advice["advice"])
 
-            st.markdown("### 最近60日走势")
-            st.line_chart(df["Close"].tail(60))
+                    st.markdown("### 参考价位")
+                    st.write(f"止损参考：{advice['stop_loss']:,} 韩元")
+                    st.write(f"第一止盈：{advice['take_profit_1']:,} 韩元")
+                    st.write(f"第二止盈：{advice['take_profit_2']:,} 韩元")
+
+                st.markdown("### 最近60日走势")
+                st.line_chart(df["Close"].tail(60))
