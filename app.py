@@ -757,8 +757,7 @@ if st.button("开始分析"):
         manual_news_score, manual_good, manual_risk = score_text(manual_news)
         global_result = get_global_market_factors()
 global_score = global_result["score"]
-
-        result = final_prediction(df, auto_news_score, manual_news_score, global_score)
+result = final_prediction(df, auto_news_score, manual_news_score, global_score)
         current_risk_level = risk_level(result["final_score"])
         current_position = position_suggestion(result["final_score"])
 
