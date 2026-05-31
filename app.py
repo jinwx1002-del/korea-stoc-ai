@@ -751,7 +751,8 @@ if st.button("开始分析"):
                 st.write(f"- {title}")
 
         st.markdown("### 📈 最近60日走势")
-        st.line_chart(df["Close"].tail(60))st.markdown("---")
+        st.line_chart(df["Close"].tail(60))
+        st.markdown("---")
 st.markdown("## 📚 复盘中心 V3.5")
 
 records = load_predictions(20)
