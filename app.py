@@ -2,6 +2,8 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
+import feedparser
+from urllib.parse import quote
 
 st.set_page_config(
     page_title="韩股AI预测助手",
@@ -12,35 +14,42 @@ st.set_page_config(
 COMMON_STOCKS = {
     "SK海力士": {
         "ticker": "000660.KS",
-        "keywords": ["SK hynix", "Hynix", "HBM", "DRAM", "memory chip", "AI memory"]
+        "ko_name": "SK하이닉스",
+        "en_name": "SK hynix",
     },
     "三星电子": {
         "ticker": "005930.KS",
-        "keywords": ["Samsung Electronics", "Samsung", "HBM", "DRAM", "semiconductor", "AI chip"]
+        "ko_name": "삼성전자",
+        "en_name": "Samsung Electronics",
     },
     "三星电机": {
         "ticker": "009150.KS",
-        "keywords": ["Samsung Electro-Mechanics", "Samsung Electro", "MLCC", "FCBGA", "silicon capacitor", "AI server"]
+        "ko_name": "삼성전기",
+        "en_name": "Samsung Electro-Mechanics",
     },
     "现代汽车": {
         "ticker": "005380.KS",
-        "keywords": ["Hyundai Motor", "Hyundai", "EV", "automobile", "car"]
+        "ko_name": "현대차",
+        "en_name": "Hyundai Motor",
     },
     "斗山能源": {
         "ticker": "034020.KS",
-        "keywords": ["Doosan Enerbility", "Doosan", "nuclear", "SMR", "energy"]
+        "ko_name": "두산에너빌리티",
+        "en_name": "Doosan Enerbility",
     },
     "LS ELECTRIC": {
         "ticker": "010120.KS",
-        "keywords": ["LS Electric", "LS ELECTRIC", "power equipment", "electric grid", "transformer"]
+        "ko_name": "LS ELECTRIC",
+        "en_name": "LS Electric",
     },
     "대한전선": {
         "ticker": "001440.KS",
-        "keywords": ["Taihan Cable", "대한전선", "cable", "power cable"]
+        "ko_name": "대한전선",
+        "en_name": "Taihan Cable",
     },
 }
 
-POSITIVE_WORDS = [
+EN_POSITIVE_WORDS = [
     "rise", "rises", "rally", "surge", "surges", "jump", "jumps", "gain", "gains",
     "beat", "beats", "strong", "growth", "record", "upgrade", "upgraded",
     "target raised", "raises target", "buy rating", "outperform",
@@ -49,7 +58,7 @@ POSITIVE_WORDS = [
     "price increase", "memory prices", "boom"
 ]
 
-NEGATIVE_WORDS = [
+EN_NEGATIVE_WORDS = [
     "fall", "falls", "drop", "drops", "decline", "declines", "slump", "selloff",
     "weak", "loss", "miss", "cut", "downgrade", "downgraded",
     "strike", "lawsuit", "delay", "delayed", "risk", "concern", "concerns",
@@ -57,8 +66,25 @@ NEGATIVE_WORDS = [
     "slowdown", "pressure", "volatile", "warning"
 ]
 
+KO_POSITIVE_WORDS = [
+    "상승", "급등", "강세", "반등", "호실적", "실적 개선", "실적개선",
+    "목표가 상향", "목표주가 상향", "상향", "매수", "수주", "공급계약",
+    "계약", "대규모", "증가", "성장", "흑자", "수혜", "AI", "HBM",
+    "반도체", "서버", "전장", "전력", "전력기기", "MLCC", "FCBGA",
+    "실리콘캐패시터", "실리콘 커패시터", "엔비디아", "마이크론", "메모리",
+    "DRAM", "D램", "낸드", "가격 상승", "증설", "투자 확대"
+]
+
+KO_NEGATIVE_WORDS = [
+    "하락", "급락", "약세", "조정", "부진", "적자", "감소", "둔화",
+    "목표가 하향", "목표주가 하향", "하향", "매도", "차익실현", "매물",
+    "우려", "리스크", "위험", "파업", "소송", "지연", "연기", "취소",
+    "경고", "압박", "규제", "관세", "수출 제한", "제재", "불확실성",
+    "실망", "쇼크", "손실", "악재"
+]
+
 st.title("📈 韩股AI预测助手")
-st.caption("手机版 V2.2｜任意韩股代码 + 技术指标 + 新闻情绪 + 成交量")
+st.caption("手机版 V2.3｜自动英文新闻 + 自动韩文新闻 + 手动新闻 + 技术指标 + 成交量")
 st.warning("结果仅供参考，不构成投资建议。股市有风险，操作需谨慎。")
 
 
@@ -120,16 +146,50 @@ def add_indicators(df):
     df["VOLATILITY"] = df["RETURN"].rolling(20).std()
 
     df["VOLUME_MA20"] = df["Volume"].rolling(20).mean()
-    df["PRICE_CHANGE"] = df["Close"].pct_change()
 
     df = df.dropna()
     return df
 
 
-def get_news_score(ticker):
-    positive_hits = []
-    negative_hits = []
-    news_titles = []
+def score_text(text):
+    text_lower = text.lower()
+
+    en_positive_hits = []
+    en_negative_hits = []
+    ko_positive_hits = []
+    ko_negative_hits = []
+
+    for word in EN_POSITIVE_WORDS:
+        if word.lower() in text_lower:
+            en_positive_hits.append(word)
+
+    for word in EN_NEGATIVE_WORDS:
+        if word.lower() in text_lower:
+            en_negative_hits.append(word)
+
+    for word in KO_POSITIVE_WORDS:
+        if word in text:
+            ko_positive_hits.append(word)
+
+    for word in KO_NEGATIVE_WORDS:
+        if word in text:
+            ko_negative_hits.append(word)
+
+    positive_hits = en_positive_hits + ko_positive_hits
+    negative_hits = en_negative_hits + ko_negative_hits
+
+    score = len(positive_hits) * 3 - len(negative_hits) * 4
+    score = max(-20, min(20, score))
+
+    return {
+        "score": score,
+        "positive_hits": list(set(positive_hits))[:12],
+        "negative_hits": list(set(negative_hits))[:12],
+    }
+
+
+def get_yfinance_news_score(ticker):
+    titles = []
 
     try:
         stock = yf.Ticker(ticker)
@@ -137,62 +197,143 @@ def get_news_score(ticker):
 
         if not news:
             return {
-                "news_score": 0,
-                "news_count": 0,
+                "score": 0,
+                "count": 0,
+                "titles": [],
                 "positive_hits": [],
                 "negative_hits": [],
-                "news_titles": [],
-                "news_comment": "暂时没有抓取到相关新闻，新闻评分按中性处理。"
+                "comment": "Yahoo/yfinance 暂时没有抓到英文新闻。"
             }
 
         for item in news[:10]:
             title = item.get("title", "")
-            if not title:
-                continue
+            if title:
+                titles.append(title)
 
-            news_titles.append(title)
-            title_lower = title.lower()
+        joined_text = " ".join(titles)
+        scored = score_text(joined_text)
 
-            for word in POSITIVE_WORDS:
-                if word.lower() in title_lower:
-                    positive_hits.append(word)
-
-            for word in NEGATIVE_WORDS:
-                if word.lower() in title_lower:
-                    negative_hits.append(word)
-
-        score = len(positive_hits) * 3 - len(negative_hits) * 4
-        score = max(-20, min(20, score))
-
-        if score > 8:
-            comment = "新闻情绪偏利好。"
-        elif score > 0:
-            comment = "新闻情绪小幅偏多。"
-        elif score < -8:
-            comment = "新闻情绪偏利空。"
-        elif score < 0:
-            comment = "新闻情绪小幅偏空。"
+        if scored["score"] > 8:
+            comment = "英文新闻情绪偏利好。"
+        elif scored["score"] > 0:
+            comment = "英文新闻情绪小幅偏多。"
+        elif scored["score"] < -8:
+            comment = "英文新闻情绪偏利空。"
+        elif scored["score"] < 0:
+            comment = "英文新闻情绪小幅偏空。"
         else:
-            comment = "新闻情绪中性。"
+            comment = "英文新闻情绪中性。"
 
         return {
-            "news_score": score,
-            "news_count": len(news_titles),
-            "positive_hits": list(set(positive_hits))[:10],
-            "negative_hits": list(set(negative_hits))[:10],
-            "news_titles": news_titles[:5],
-            "news_comment": comment
+            "score": scored["score"],
+            "count": len(titles),
+            "titles": titles[:5],
+            "positive_hits": scored["positive_hits"],
+            "negative_hits": scored["negative_hits"],
+            "comment": comment
         }
 
     except Exception:
         return {
-            "news_score": 0,
-            "news_count": 0,
+            "score": 0,
+            "count": 0,
+            "titles": [],
             "positive_hits": [],
             "negative_hits": [],
-            "news_titles": [],
-            "news_comment": "新闻数据读取失败，新闻评分按中性处理。"
+            "comment": "英文新闻读取失败，按中性处理。"
         }
+
+
+def get_google_news_score(query, language="ko"):
+    titles = []
+
+    try:
+        encoded_query = quote(query)
+
+        if language == "ko":
+            url = f"https://news.google.com/rss/search?q={encoded_query}&hl=ko&gl=KR&ceid=KR:ko"
+        else:
+            url = f"https://news.google.com/rss/search?q={encoded_query}&hl=en-US&gl=US&ceid=US:en"
+
+        feed = feedparser.parse(url)
+
+        for entry in feed.entries[:10]:
+            title = entry.get("title", "")
+            if title:
+                titles.append(title)
+
+        if not titles:
+            return {
+                "score": 0,
+                "count": 0,
+                "titles": [],
+                "positive_hits": [],
+                "negative_hits": [],
+                "comment": "Google News 暂时没有抓到相关新闻。"
+            }
+
+        joined_text = " ".join(titles)
+        scored = score_text(joined_text)
+
+        if scored["score"] > 8:
+            comment = "Google News 新闻情绪偏利好。"
+        elif scored["score"] > 0:
+            comment = "Google News 新闻情绪小幅偏多。"
+        elif scored["score"] < -8:
+            comment = "Google News 新闻情绪偏利空。"
+        elif scored["score"] < 0:
+            comment = "Google News 新闻情绪小幅偏空。"
+        else:
+            comment = "Google News 新闻情绪中性。"
+
+        return {
+            "score": scored["score"],
+            "count": len(titles),
+            "titles": titles[:5],
+            "positive_hits": scored["positive_hits"],
+            "negative_hits": scored["negative_hits"],
+            "comment": comment
+        }
+
+    except Exception:
+        return {
+            "score": 0,
+            "count": 0,
+            "titles": [],
+            "positive_hits": [],
+            "negative_hits": [],
+            "comment": "Google News 读取失败，按中性处理。"
+        }
+
+
+def get_manual_news_score(manual_text):
+    if not manual_text.strip():
+        return {
+            "score": 0,
+            "positive_hits": [],
+            "negative_hits": [],
+            "comment": "没有输入手动新闻，手动新闻评分按中性处理。"
+        }
+
+    scored = score_text(manual_text)
+
+    if scored["score"] > 8:
+        comment = "手动新闻情绪偏利好。"
+    elif scored["score"] > 0:
+        comment = "手动新闻情绪小幅偏多。"
+    elif scored["score"] < -8:
+        comment = "手动新闻情绪偏利空。"
+    elif scored["score"] < 0:
+        comment = "手动新闻情绪小幅偏空。"
+    else:
+        comment = "手动新闻情绪中性。"
+
+    return {
+        "score": scored["score"],
+        "positive_hits": scored["positive_hits"],
+        "negative_hits": scored["negative_hits"],
+        "comment": comment
+    }
 
 
 def get_volume_score(df):
@@ -207,9 +348,9 @@ def get_volume_score(df):
 
     if volume_ma20 <= 0:
         return {
-            "volume_score": 0,
-            "volume_ratio": 0,
-            "volume_comment": "成交量数据不足，成交量评分按中性处理。"
+            "score": 0,
+            "ratio": 0,
+            "comment": "成交量数据不足，成交量评分按中性处理。"
         }
 
     volume_ratio = volume / volume_ma20
@@ -241,9 +382,9 @@ def get_volume_score(df):
         comment = "成交量正常，资金面没有明显异常。"
 
     return {
-        "volume_score": score,
-        "volume_ratio": round(volume_ratio, 2),
-        "volume_comment": comment
+        "score": score,
+        "ratio": round(volume_ratio, 2),
+        "comment": comment
     }
 
 
@@ -297,19 +438,23 @@ def make_technical_prediction(df):
         "macd": macd,
         "macd_signal": macd_signal,
         "volatility": volatility,
-        "technical_score": round(score)
+        "score": round(score)
     }
 
 
-def make_final_prediction(technical, news_result, volume_result):
+def make_final_prediction(technical, volume_result, yf_news, google_ko_news, google_en_news, manual_news):
     close = technical["close"]
     volatility = technical["volatility"]
 
-    technical_score = technical["technical_score"]
-    news_score = news_result["news_score"]
-    volume_score = volume_result["volume_score"]
+    technical_score = technical["score"]
+    volume_score = volume_result["score"]
 
-    final_score = technical_score + news_score + volume_score
+    auto_news_score = yf_news["score"] + google_ko_news["score"] + google_en_news["score"]
+    auto_news_score = max(-25, min(25, auto_news_score))
+
+    manual_news_score = manual_news["score"]
+
+    final_score = technical_score + volume_score + auto_news_score + manual_news_score
     final_score = max(0, min(100, final_score))
 
     expected_change = (final_score - 50) / 1000
@@ -333,8 +478,9 @@ def make_final_prediction(technical, news_result, volume_result):
     return {
         "close": round(close),
         "technical_score": round(technical_score),
-        "news_score": round(news_score),
         "volume_score": round(volume_score),
+        "auto_news_score": round(auto_news_score),
+        "manual_news_score": round(manual_news_score),
         "final_score": round(final_score),
         "trend": trend,
         "predicted_price": round(predicted_price),
@@ -346,7 +492,7 @@ def make_final_prediction(technical, news_result, volume_result):
     }
 
 
-def get_advice(current_price, cost_price, quantity, final_score, news_score, volume_score):
+def get_advice(current_price, cost_price, quantity, final_score, volume_score, auto_news_score, manual_news_score):
     total_cost = cost_price * quantity
     total_value = current_price * quantity
     profit = total_value - total_cost
@@ -385,10 +531,15 @@ def get_advice(current_price, cost_price, quantity, final_score, news_score, vol
         advice = "综合趋势偏弱，建议谨慎，不建议加仓。"
         signal = "🔴 谨慎"
 
-    if news_score <= -10:
-        advice += " 新闻情绪偏空，开盘后要特别注意快速回落。"
-    elif news_score >= 10:
-        advice += " 新闻情绪偏利好，短线资金关注度可能较高。"
+    if auto_news_score <= -12:
+        advice += " 自动新闻偏空，开盘后注意快速回落。"
+    elif auto_news_score >= 12:
+        advice += " 自动新闻偏利好，短线资金关注度可能较高。"
+
+    if manual_news_score <= -8:
+        advice += " 你输入的手动新闻偏空，要提高防守。"
+    elif manual_news_score >= 8:
+        advice += " 你输入的手动新闻偏利好，可继续观察资金承接。"
 
     if volume_score <= -8:
         advice += " 成交量显示抛压偏大，注意不要硬扛。"
@@ -416,7 +567,10 @@ mode = st.radio(
 
 if mode == "常用股票":
     stock_name = st.selectbox("选择股票", list(COMMON_STOCKS.keys()))
-    ticker = COMMON_STOCKS[stock_name]["ticker"]
+    stock_info = COMMON_STOCKS[stock_name]
+    ticker = stock_info["ticker"]
+    ko_name = stock_info["ko_name"]
+    en_name = stock_info["en_name"]
     display_name = stock_name
 else:
     stock_code = st.text_input("输入6位韩股代码，例如 000660、005930、009150", value="000660")
@@ -426,17 +580,26 @@ else:
         st.error("请输入正确的6位韩股代码，例如 000660。")
         st.stop()
 
+    custom_name = st.text_input("可选：输入公司韩文名/英文名，提高新闻搜索准确度", value="")
+    ko_name = custom_name.strip() if custom_name.strip() else stock_code
+    en_name = custom_name.strip() if custom_name.strip() else stock_code
     display_name = f"自定义股票 {ticker}"
 
 quantity = st.number_input("持仓数量", min_value=0, value=1, step=1)
 cost_price = st.number_input("你的成本价（韩元）", min_value=0, value=0, step=1000)
 
+manual_news_text = st.text_area(
+    "可选：手动粘贴新闻标题/内容，支持韩文、英文、中文",
+    placeholder="例如：삼성전기, AI 서버용 실리콘캐패시터 대규모 공급 계약\n或者复制证券软件、Telegram、Naver新闻标题到这里",
+    height=120
+)
+
 if st.button("开始分析"):
-    with st.spinner("正在获取行情、计算技术指标、分析新闻情绪和成交量..."):
+    with st.spinner("正在获取行情、成交量、英文新闻、韩文新闻和手动新闻情绪..."):
         df = get_stock_data(ticker)
 
         if df is None or df.empty:
-            st.error("行情数据获取失败。可能原因：代码错误、该股票不是KOSPI代码，或yfinance暂时无数据。")
+            st.error("行情数据获取失败。可能原因：代码错误、该股票不是KOSPI代码，或 yfinance 暂时无数据。")
         else:
             df = add_indicators(df)
 
@@ -444,9 +607,21 @@ if st.button("开始分析"):
                 st.error("数据不足，无法计算指标。")
             else:
                 technical = make_technical_prediction(df)
-                news_result = get_news_score(ticker)
                 volume_result = get_volume_score(df)
-                result = make_final_prediction(technical, news_result, volume_result)
+
+                yf_news = get_yfinance_news_score(ticker)
+                google_ko_news = get_google_news_score(f"{ko_name} 주가 뉴스", language="ko")
+                google_en_news = get_google_news_score(f"{en_name} stock news", language="en")
+                manual_news = get_manual_news_score(manual_news_text)
+
+                result = make_final_prediction(
+                    technical,
+                    volume_result,
+                    yf_news,
+                    google_ko_news,
+                    google_en_news,
+                    manual_news
+                )
 
                 st.subheader(f"{display_name} 综合分析结果")
 
@@ -455,10 +630,13 @@ if st.button("开始分析"):
                 st.metric("趋势判断", result["trend"])
 
                 st.markdown("### 评分拆解")
-                col_a, col_b, col_c = st.columns(3)
+                col_a, col_b = st.columns(2)
                 col_a.metric("技术评分", f"{result['technical_score']} / 100")
-                col_b.metric("新闻影响", f"{result['news_score']:+d}")
-                col_c.metric("成交量影响", f"{result['volume_score']:+d}")
+                col_b.metric("成交量影响", f"{result['volume_score']:+d}")
+
+                col_c, col_d = st.columns(2)
+                col_c.metric("自动新闻影响", f"{result['auto_news_score']:+d}")
+                col_d.metric("手动新闻影响", f"{result['manual_news_score']:+d}")
 
                 st.markdown("### 明日价格预测")
                 col1, col2, col3 = st.columns(3)
@@ -472,25 +650,59 @@ if st.button("开始分析"):
                 st.write(f"RSI：{result['rsi']}")
 
                 st.markdown("### 成交量分析")
-                st.write(f"今日成交量 / 20日均量：{volume_result['volume_ratio']} 倍")
-                st.info(volume_result["volume_comment"])
+                st.write(f"今日成交量 / 20日均量：{volume_result['ratio']} 倍")
+                st.info(volume_result["comment"])
 
-                st.markdown("### 新闻情绪")
-                st.write(f"相关新闻数量：{news_result['news_count']}")
-                st.info(news_result["news_comment"])
-
-                if news_result["positive_hits"]:
+                st.markdown("### 自动英文新闻 Yahoo/yfinance")
+                st.write(f"相关新闻数量：{yf_news['count']}")
+                st.info(yf_news["comment"])
+                if yf_news["positive_hits"]:
                     st.write("利好关键词：")
-                    st.write("、".join(news_result["positive_hits"]))
-
-                if news_result["negative_hits"]:
+                    st.write("、".join(yf_news["positive_hits"]))
+                if yf_news["negative_hits"]:
                     st.write("利空关键词：")
-                    st.write("、".join(news_result["negative_hits"]))
-
-                if news_result["news_titles"]:
-                    st.write("抓取到的新闻标题：")
-                    for title in news_result["news_titles"]:
+                    st.write("、".join(yf_news["negative_hits"]))
+                if yf_news["titles"]:
+                    st.write("英文新闻标题：")
+                    for title in yf_news["titles"]:
                         st.write(f"- {title}")
+
+                st.markdown("### 自动韩文新闻 Google News")
+                st.write(f"相关新闻数量：{google_ko_news['count']}")
+                st.info(google_ko_news["comment"])
+                if google_ko_news["positive_hits"]:
+                    st.write("利好关键词：")
+                    st.write("、".join(google_ko_news["positive_hits"]))
+                if google_ko_news["negative_hits"]:
+                    st.write("利空关键词：")
+                    st.write("、".join(google_ko_news["negative_hits"]))
+                if google_ko_news["titles"]:
+                    st.write("韩文新闻标题：")
+                    for title in google_ko_news["titles"]:
+                        st.write(f"- {title}")
+
+                st.markdown("### 自动英文新闻 Google News")
+                st.write(f"相关新闻数量：{google_en_news['count']}")
+                st.info(google_en_news["comment"])
+                if google_en_news["positive_hits"]:
+                    st.write("利好关键词：")
+                    st.write("、".join(google_en_news["positive_hits"]))
+                if google_en_news["negative_hits"]:
+                    st.write("利空关键词：")
+                    st.write("、".join(google_en_news["negative_hits"]))
+                if google_en_news["titles"]:
+                    st.write("英文新闻标题：")
+                    for title in google_en_news["titles"]:
+                        st.write(f"- {title}")
+
+                st.markdown("### 手动新闻分析")
+                st.info(manual_news["comment"])
+                if manual_news["positive_hits"]:
+                    st.write("手动新闻利好关键词：")
+                    st.write("、".join(manual_news["positive_hits"]))
+                if manual_news["negative_hits"]:
+                    st.write("手动新闻利空关键词：")
+                    st.write("、".join(manual_news["negative_hits"]))
 
                 if quantity > 0 and cost_price > 0:
                     advice = get_advice(
@@ -498,8 +710,9 @@ if st.button("开始分析"):
                         cost_price,
                         quantity,
                         result["final_score"],
-                        result["news_score"],
-                        result["volume_score"]
+                        result["volume_score"],
+                        result["auto_news_score"],
+                        result["manual_news_score"]
                     )
 
                     st.markdown("### 我的持仓建议")
