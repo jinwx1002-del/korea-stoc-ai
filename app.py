@@ -39,35 +39,39 @@ COMMON_STOCKS = {
 }
 
 EN_POSITIVE_WORDS = [
-    "rise", "rally", "surge", "jump", "gain", "strong", "growth", "record",
-    "upgrade", "target raised", "buy rating", "outperform", "order", "contract",
-    "supply", "demand", "AI", "HBM", "DRAM", "Nvidia", "Micron", "profit",
-    "revenue", "boom"
+    "rise", "rises", "rally", "surge", "surges", "jump", "jumps", "gain", "gains",
+    "beat", "strong", "growth", "record", "upgrade", "upgraded", "target raised",
+    "raises target", "buy rating", "outperform", "order", "contract", "supply",
+    "demand", "AI", "HBM", "DRAM", "Nvidia", "Micron", "server", "accelerator",
+    "profit", "revenue", "shipments", "price increase", "boom"
 ]
 
 EN_NEGATIVE_WORDS = [
-    "fall", "drop", "decline", "slump", "selloff", "weak", "loss", "miss",
-    "downgrade", "strike", "lawsuit", "delay", "risk", "concern", "tariff",
-    "ban", "slowdown", "pressure", "warning"
+    "fall", "falls", "drop", "drops", "decline", "declines", "slump", "selloff",
+    "weak", "loss", "miss", "cut", "downgrade", "downgraded", "strike", "lawsuit",
+    "delay", "delayed", "risk", "concern", "concerns", "tariff", "ban",
+    "investigation", "shortage", "slowdown", "pressure", "volatile", "warning"
 ]
 
 KO_POSITIVE_WORDS = [
-    "상승", "급등", "강세", "반등", "호실적", "실적 개선", "목표가 상향",
-    "목표주가 상향", "매수", "수주", "공급계약", "계약", "대규모",
-    "증가", "성장", "흑자", "수혜", "AI", "HBM", "반도체", "서버",
-    "전력기기", "MLCC", "FCBGA", "실리콘캐패시터", "엔비디아", "마이크론",
-    "메모리", "D램", "가격 상승", "투자 확대"
+    "상승", "급등", "강세", "반등", "호실적", "실적 개선", "실적개선",
+    "목표가 상향", "목표주가 상향", "상향", "매수", "수주", "공급계약",
+    "계약", "대규모", "증가", "성장", "흑자", "수혜", "AI", "HBM",
+    "반도체", "서버", "전장", "전력", "전력기기", "MLCC", "FCBGA",
+    "실리콘캐패시터", "실리콘 커패시터", "엔비디아", "마이크론", "메모리",
+    "DRAM", "D램", "낸드", "가격 상승", "증설", "투자 확대"
 ]
 
 KO_NEGATIVE_WORDS = [
     "하락", "급락", "약세", "조정", "부진", "적자", "감소", "둔화",
-    "목표가 하향", "목표주가 하향", "매도", "차익실현", "매물", "우려",
-    "리스크", "위험", "파업", "소송", "지연", "취소", "경고", "규제",
-    "관세", "수출 제한", "제재", "불확실성", "쇼크", "악재"
+    "목표가 하향", "목표주가 하향", "하향", "매도", "차익실현", "매물",
+    "우려", "리스크", "위험", "파업", "소송", "지연", "연기", "취소",
+    "경고", "압박", "규제", "관세", "수출 제한", "제재", "불확실성",
+    "실망", "쇼크", "손실", "악재"
 ]
 
 st.title("📈 文星AI交易系统 Pro")
-st.caption("V3.0 Lite｜技术指标｜成交量｜韩文新闻｜英文新闻｜手动新闻｜风险雷达｜仓位管理")
+st.caption("V3.0｜技术指标｜成交量｜韩文新闻｜英文新闻｜手动新闻｜风险雷达｜仓位管理")
 st.warning("本系统仅供参考，不构成投资建议。股市有风险，操作需谨慎。")
 
 
@@ -207,45 +211,45 @@ def technical_score(df):
     signal = safe_float(latest["MACD_SIGNAL"])
 
     score = 50
-    reasons_good = []
-    reasons_risk = []
+    good = []
+    risk = []
 
     if close > ma5:
         score += 8
-        reasons_good.append("股价站上5日线")
+        good.append("股价站上5日线")
     else:
         score -= 8
-        reasons_risk.append("股价跌破5日线")
+        risk.append("股价跌破5日线")
 
     if close > ma20:
         score += 12
-        reasons_good.append("股价站上20日线")
+        good.append("股价站上20日线")
     else:
         score -= 12
-        reasons_risk.append("股价跌破20日线")
+        risk.append("股价跌破20日线")
 
     if ma5 > ma20:
         score += 8
-        reasons_good.append("短线均线强于中线")
+        good.append("短线均线强于中线")
     else:
         score -= 8
-        reasons_risk.append("短线均线走弱")
+        risk.append("短线均线走弱")
 
     if macd > signal:
         score += 8
-        reasons_good.append("MACD动能偏强")
+        good.append("MACD动能偏强")
     else:
         score -= 8
-        reasons_risk.append("MACD动能偏弱")
+        risk.append("MACD动能偏弱")
 
     if rsi >= 75:
         score -= 12
-        reasons_risk.append("RSI过热，追高风险上升")
+        risk.append("RSI过热，追高风险上升")
     elif rsi <= 30:
         score += 8
-        reasons_good.append("RSI偏低，有反弹机会")
+        good.append("RSI偏低，有反弹机会")
 
-    return max(0, min(100, score)), reasons_good, reasons_risk
+    return max(0, min(100, score)), good, risk
 
 
 def volume_score(df):
@@ -285,8 +289,6 @@ def volume_score(df):
     elif change < 0 and ratio < 0.8:
         score = 3
         good.append("缩量下跌，恐慌不明显")
-    else:
-        score = 0
 
     return score, f"{ratio:.2f}倍", good, risk
 
@@ -303,15 +305,15 @@ def final_prediction(df, news_score, manual_score):
     final_score = tech + vol_score + news_score + manual_score
     final_score = max(0, min(100, final_score))
 
-    expected_change_today = (final_score - 50) / 1200
-    expected_change_next = (final_score - 50) / 1000
+    today_change = (final_score - 50) / 1200
+    next_change = (final_score - 50) / 1000
 
-    today_mid = close * (1 + expected_change_today)
-    next_mid = close * (1 + expected_change_next)
+    today_mid = close * (1 + today_change)
+    next_mid = close * (1 + next_change)
 
     price_range = max(volatility * 2, 0.025)
 
-    result = {
+    return {
         "close": round(close),
         "tech_score": round(tech),
         "volume_score": round(vol_score),
@@ -332,8 +334,6 @@ def final_prediction(df, news_score, manual_score):
         "risk_sources": risk_t + risk_v,
     }
 
-    return result
-
 
 def risk_level(score):
     if score >= 80:
@@ -342,8 +342,7 @@ def risk_level(score):
         return "B级（中等风险）"
     elif score >= 50:
         return "C级（较高风险）"
-    else:
-        return "D级（高风险）"
+    return "D级（高风险）"
 
 
 def position_suggestion(score):
@@ -355,8 +354,7 @@ def position_suggestion(score):
         return "40%~50%"
     elif score >= 45:
         return "20%~30%"
-    else:
-        return "10%以下"
+    return "10%以下"
 
 
 def trend_text(score):
@@ -366,8 +364,7 @@ def trend_text(score):
         return "🟡 偏多"
     elif score >= 50:
         return "⚪ 震荡"
-    else:
-        return "🔴 偏弱"
+    return "🔴 偏弱"
 
 
 def ai_summary(score, risk_sources, good_sources):
@@ -482,7 +479,6 @@ if st.button("开始分析"):
 
         all_auto_news = " ".join(yf_titles + ko_titles + en_titles)
         auto_news_score, auto_good, auto_risk = score_text(all_auto_news)
-
         manual_news_score, manual_good, manual_risk = score_text(manual_news)
 
         result = final_prediction(df, auto_news_score, manual_news_score)
@@ -543,7 +539,12 @@ if st.button("开始分析"):
         st.write(f"今日成交量 / 20日均量：{result['vol_ratio']}")
 
         if quantity > 0 and cost_price > 0:
-            advice = holding_advice(result["close"], cost_price, quantity, result["final_score"])
+            advice = holding_advice(
+                result["close"],
+                cost_price,
+                quantity,
+                result["final_score"]
+            )
 
             st.markdown("### 💼 我的持仓建议")
             h1, h2, h3, h4 = st.columns(4)
