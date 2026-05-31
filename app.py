@@ -6,7 +6,7 @@ import feedparser
 from urllib.parse import quote
 
 st.set_page_config(
-    page_title="文星韩股AI预测",
+    page_title="文星韩股AI预测pro",
     page_icon="📈",
     layout="centered"
 )
@@ -83,7 +83,7 @@ KO_NEGATIVE_WORDS = [
     "실망", "쇼크", "손실", "악재"
 ]
 
-st.title("📈 文星韩股AI预测")
+st.title("📈 文星韩股AI预测pro")
 st.caption("手机版 V2.3｜自动英文新闻 + 自动韩文新闻 + 手动新闻 + 技术指标 + 成交量")
 st.warning("结果仅供参考，不构成投资建议。股市有风险，操作需谨慎。")
 
