@@ -6,7 +6,7 @@ import feedparser
 from urllib.parse import quote
 
 st.set_page_config(
-    page_title="金朵儿韩股致富AI预测助手",
+    page_title="韩股AI预测助手",
     page_icon="📈",
     layout="centered"
 )
