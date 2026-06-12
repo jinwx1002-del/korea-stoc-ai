@@ -8,25 +8,21 @@ from urllib.parse import quote
 from datetime import datetime
 
 st.set_page_config(
-    page_title="文星AI交易系统 Pro",
+    page_title="文星AI交易系统 Pro V4",
     page_icon="📈",
     layout="wide"
 )
 
 st.markdown("""
 <style>
-.main {
-    background-color: #0E1117;
-}
+.main { background-color: #0E1117; }
 div[data-testid="stMetric"] {
     background: #1E222D;
     border-radius: 15px;
     padding: 15px;
     border: 1px solid #333;
 }
-.stAlert {
-    border-radius: 12px;
-}
+.stAlert { border-radius: 12px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -43,46 +39,43 @@ COMMON_STOCKS = {
 }
 
 EN_POSITIVE_WORDS = [
-    "rise", "rises", "rally", "surge", "surges", "jump", "jumps", "gain", "gains",
-    "beat", "strong", "growth", "record", "upgrade", "upgraded", "target raised",
-    "raises target", "buy rating", "outperform", "order", "contract", "supply",
-    "demand", "AI", "HBM", "DRAM", "Nvidia", "Micron", "server", "accelerator",
-    "profit", "revenue", "shipments", "price increase", "boom", "cut rates",
-    "rate cut", "dovish", "soft landing"
+    "rise", "rally", "surge", "jump", "gain", "beat", "strong", "growth",
+    "record", "upgrade", "target raised", "buy rating", "outperform",
+    "order", "contract", "supply", "demand", "AI", "HBM", "DRAM",
+    "Nvidia", "Micron", "server", "profit", "revenue", "rate cut"
 ]
 
 EN_NEGATIVE_WORDS = [
-    "fall", "falls", "drop", "drops", "decline", "declines", "slump", "selloff",
-    "weak", "loss", "miss", "cut", "downgrade", "downgraded", "strike", "lawsuit",
-    "delay", "delayed", "risk", "concern", "concerns", "tariff", "ban",
-    "investigation", "shortage", "slowdown", "pressure", "volatile", "warning",
-    "hawkish", "rate hike", "higher rates", "inflation", "sanctions"
+    "fall", "drop", "decline", "slump", "selloff", "weak", "loss", "miss",
+    "cut", "downgrade", "strike", "lawsuit", "delay", "risk", "concern",
+    "tariff", "ban", "investigation", "slowdown", "warning", "inflation"
 ]
 
 KO_POSITIVE_WORDS = [
-    "상승", "급등", "강세", "반등", "호실적", "실적 개선", "실적개선",
-    "목표가 상향", "목표주가 상향", "상향", "매수", "수주", "공급계약",
-    "계약", "대규모", "증가", "성장", "흑자", "수혜", "AI", "HBM",
-    "반도체", "서버", "전장", "전력", "전력기기", "MLCC", "FCBGA",
-    "실리콘캐패시터", "실리콘 커패시터", "엔비디아", "마이크론", "메모리",
-    "DRAM", "D램", "낸드", "가격 상승", "증설", "투자 확대", "금리 인하"
+    "상승", "급등", "강세", "반등", "호실적", "실적 개선", "목표가 상향",
+    "매수", "수주", "공급계약", "계약", "증가", "성장", "흑자", "수혜",
+    "AI", "HBM", "반도체", "서버", "전장", "전력", "MLCC", "FCBGA",
+    "엔비디아", "마이크론", "메모리", "DRAM", "D램", "가격 상승", "금리 인하"
 ]
 
 KO_NEGATIVE_WORDS = [
     "하락", "급락", "약세", "조정", "부진", "적자", "감소", "둔화",
-    "목표가 하향", "목표주가 하향", "하향", "매도", "차익실현", "매물",
-    "우려", "리스크", "위험", "파업", "소송", "지연", "연기", "취소",
-    "경고", "압박", "규제", "관세", "수출 제한", "제재", "불확실성",
-    "실망", "쇼크", "손실", "악재", "금리 인상", "인플레이션"
+    "목표가 하향", "매도", "차익실현", "매물", "우려", "리스크", "파업",
+    "소송", "지연", "취소", "경고", "규제", "관세", "제재", "악재"
 ]
 
-st.title("📈 文星AI交易系统 Pro")
-st.sidebar.metric(
-    "刷新时间",
-    datetime.now().strftime("%H:%M:%S")
-)
-st.caption("V3.6｜全球市场因子｜NVDA｜MU｜NASDAQ｜SOX｜美元韩元｜Fed｜Trump｜复盘中心")
+st.title("📈 文星AI交易系统 Pro V4")
+st.caption("V4｜全球实时雷达｜海力士成本中心｜SOX｜NVDA｜MU｜美元韩元｜WTI｜10年债")
+st.sidebar.metric("刷新时间", datetime.now().strftime("%H:%M:%S"))
 st.warning("本系统仅供参考，不构成投资建议。股市有风险，操作需谨慎。")
+
+
+def safe_float(value):
+    if isinstance(value, pd.Series):
+        return float(value.iloc[0])
+    if isinstance(value, np.ndarray):
+        return float(value.flatten()[0])
+    return float(value)
 
 
 def init_db():
@@ -180,21 +173,13 @@ def update_actual_price(record_id, actual_close):
 init_db()
 
 
-def safe_float(value):
-    if isinstance(value, pd.Series):
-        return float(value.iloc[0])
-    if isinstance(value, np.ndarray):
-        return float(value.flatten()[0])
-    return float(value)
-
-
-def normalize_korean_ticker(code):
+def normalize_korean_ticker(code, market):
     code = code.strip().replace(" ", "")
     if code.endswith(".KS") or code.endswith(".KQ"):
         return code
     if not code.isdigit() or len(code) != 6:
         return None
-    return f"{code}.KS"
+    return f"{code}.KS" if market == "KOSPI" else f"{code}.KQ"
 
 
 def get_stock_data(ticker):
@@ -305,18 +290,17 @@ def get_yfinance_news(ticker):
     return titles
 
 
-def get_global_market_factors():
-    def get_realtime_global_dashboard():
-        tickers = {
+def get_realtime_global_dashboard():
+    tickers = {
         "道琼斯": "^DJI",
         "纳斯达克": "^IXIC",
         "S&P500": "^GSPC",
         "费城半导体SOX": "^SOX",
         "纳斯达克100": "^NDX",
+        "纳斯达克100期货": "NQ=F",
         "美元韩元": "KRW=X",
         "WTI原油": "CL=F",
         "美国10年债": "^TNX",
-        "纳斯达克100期货": "NQ=F",
 
         "NVDA 英伟达": "NVDA",
         "MU 美光": "MU",
@@ -343,7 +327,7 @@ def get_global_market_factors():
                 progress=False
             )
 
-            if df.empty or len(df) < 2:
+            if df is None or df.empty or len(df) < 2:
                 rows.append([name, symbol, None, None, 0, "数据不足"])
                 continue
 
@@ -437,103 +421,6 @@ def get_global_market_factors():
     total_score = max(-40, min(40, total_score))
 
     return df_result, total_score
-    factors = []
-    total_score = 0
-
-    tickers = {
-        "NVDA 英伟达": "NVDA",
-        "MU 美光": "MU",
-        "NASDAQ 纳斯达克": "^IXIC",
-        "SOX 半导体指数": "^SOX",
-        "USD/KRW 美元韩元": "KRW=X",
-    }
-
-    for name, symbol in tickers.items():
-        score = 0
-        comment = "数据不足"
-
-        try:
-            df = yf.download(
-                symbol,
-                period="5d",
-                interval="1d",
-                auto_adjust=False,
-                progress=False
-            )
-
-            if df is not None and not df.empty and len(df) >= 2:
-                if isinstance(df.columns, pd.MultiIndex):
-                    df.columns = df.columns.get_level_values(0)
-
-                last_close = safe_float(df["Close"].iloc[-1])
-                prev_close = safe_float(df["Close"].iloc[-2])
-                change = (last_close - prev_close) / prev_close * 100
-                comment = f"{change:.2f}%"
-
-                if symbol in ["NVDA", "MU"]:
-                    if change >= 5:
-                        score = 10
-                    elif change >= 2:
-                        score = 7
-                    elif change > 0:
-                        score = 3
-                    elif change <= -5:
-                        score = -10
-                    elif change <= -2:
-                        score = -7
-                    elif change < 0:
-                        score = -3
-
-                elif symbol in ["^IXIC", "^SOX"]:
-                    if change >= 2:
-                        score = 8
-                    elif change >= 1:
-                        score = 5
-                    elif change > 0:
-                        score = 2
-                    elif change <= -2:
-                        score = -8
-                    elif change <= -1:
-                        score = -5
-                    elif change < 0:
-                        score = -2
-
-                elif symbol == "KRW=X":
-                    if 0 < change <= 1:
-                        score = 3
-                    elif 1 < change <= 2:
-                        score = 1
-                    elif change > 2:
-                        score = -3
-                    elif change < -1:
-                        score = -2
-
-        except Exception:
-            comment = "读取失败"
-
-        total_score += score
-        factors.append((name, score, comment))
-
-    fed_titles = get_google_news("Federal Reserve Powell interest rate stock market", language="en")
-    fed_score_raw, fed_good, fed_risk = score_text(" ".join(fed_titles))
-    fed_score = max(-8, min(8, fed_score_raw))
-    total_score += fed_score
-    factors.append(("Fed 美联储新闻", fed_score, "、".join((fed_good + fed_risk)[:4]) if fed_titles else "无新闻"))
-
-    trump_titles = get_google_news("Trump tariff semiconductor chips stock market", language="en")
-    trump_score_raw, trump_good, trump_risk = score_text(" ".join(trump_titles))
-    trump_score = max(-8, min(8, trump_score_raw))
-    total_score += trump_score
-    factors.append(("Trump 特朗普政策", trump_score, "、".join((trump_good + trump_risk)[:4]) if trump_titles else "无新闻"))
-
-    total_score = max(-30, min(30, total_score))
-
-    return {
-        "score": total_score,
-        "factors": factors,
-        "fed_titles": fed_titles[:5],
-        "trump_titles": trump_titles[:5],
-    }
 
 
 def technical_score(df):
@@ -765,6 +652,23 @@ def holding_advice(current_price, cost_price, quantity, score):
     }
 
 
+def cost_center(current_price, cost_price):
+    if cost_price <= 0:
+        return None
+
+    diff = current_price - cost_price
+    need_pct = (cost_price - current_price) / current_price * 100 if current_price > 0 else 0
+
+    return {
+        "diff": round(diff),
+        "need_pct": round(need_pct, 2),
+        "break_even": round(cost_price),
+        "pressure_1": round(cost_price * 0.98),
+        "pressure_2": round(cost_price),
+        "pressure_3": round(cost_price * 1.03),
+    }
+
+
 mode = st.radio("选择股票方式", ["常用股票", "输入韩股代码"], horizontal=True)
 
 if mode == "常用股票":
@@ -775,8 +679,9 @@ if mode == "常用股票":
     en_name = info["en"]
     display_name = stock_name
 else:
+    market = st.radio("市场", ["KOSPI", "KOSDAQ"], horizontal=True)
     code = st.text_input("输入6位韩股代码，例如 000660、005930、009150", value="000660")
-    ticker = normalize_korean_ticker(code)
+    ticker = normalize_korean_ticker(code, market)
 
     if ticker is None:
         st.error("请输入正确的6位韩股代码。")
@@ -788,12 +693,12 @@ else:
     display_name = f"自定义股票 {ticker}"
 
 quantity = st.number_input("持仓数量", min_value=0, value=1, step=1)
-cost_price = st.number_input("你的成本价（韩元）", min_value=0, value=0, step=1000)
+cost_price = st.number_input("你的成本价（韩元）", min_value=0, value=2170000, step=1000)
 
 manual_news = st.text_area(
     "可选：手动粘贴新闻标题/内容，支持韩文、英文、中文",
     height=120,
-    placeholder="例如：삼성전기, AI 서버용 실리콘캐패시터 대규모 공급 계약"
+    placeholder="例如：SK하이닉스, HBM 대규모 공급 계약"
 )
 
 if st.button("开始分析"):
@@ -818,9 +723,9 @@ if st.button("开始分析"):
         auto_news_score, auto_good, auto_risk = score_text(all_auto_news)
         manual_news_score, manual_good, manual_risk = score_text(manual_news)
 
-        global_result = get_global_market_factors()
         global_df, realtime_global_score = get_realtime_global_dashboard()
         global_score = realtime_global_score
+
         result = final_prediction(
             df,
             auto_news_score,
@@ -831,11 +736,11 @@ if st.button("开始分析"):
         good_sources = result["good_sources"] + auto_good + manual_good
         risk_sources = result["risk_sources"] + auto_risk + manual_risk
 
-        for name, score, comment in global_result["factors"]:
-            if score > 0:
-                good_sources.append(f"{name}：{score:+d}｜{comment}")
-            elif score < 0:
-                risk_sources.append(f"{name}：{score:+d}｜{comment}")
+        for _, row in global_df.iterrows():
+            if row["影响分"] > 0:
+                good_sources.append(f"{row['名称']}：{row['涨跌幅%']}%｜{row['影响分']:+d}")
+            elif row["影响分"] < 0:
+                risk_sources.append(f"{row['名称']}：{row['涨跌幅%']}%｜{row['影响分']:+d}")
 
         current_risk = risk_level(result["final_score"])
         current_position = position_suggestion(result["final_score"])
@@ -858,6 +763,18 @@ if st.button("开始分析"):
 
         st.markdown(f"## {trend_text(result['final_score'])}")
 
+        st.markdown("## 🌍 全球实时市场雷达 V4")
+        st.dataframe(global_df, use_container_width=True)
+
+        if realtime_global_score >= 20:
+            st.success(f"全球市场总分：{realtime_global_score}｜强利好韩国科技股")
+        elif realtime_global_score >= 8:
+            st.info(f"全球市场总分：{realtime_global_score}｜偏利好")
+        elif realtime_global_score > -8:
+            st.warning(f"全球市场总分：{realtime_global_score}｜中性震荡")
+        else:
+            st.error(f"全球市场总分：{realtime_global_score}｜风险偏高")
+
         st.markdown("### 📊 评分拆解")
         s1, s2, s3, s4, s5 = st.columns(5)
         s1.metric("技术评分", f"{result['tech_score']} / 100")
@@ -865,42 +782,6 @@ if st.button("开始分析"):
         s3.metric("自动新闻影响", f"{result['news_score']:+d}")
         s4.metric("手动新闻影响", f"{result['manual_score']:+d}")
         s5.metric("全球市场影响", f"{result['global_score']:+d}")
-
-        
-         st.markdown("## 🌍 全球实时市场雷达 V4")
-
-st.dataframe(
-    global_df,
-    use_container_width=True
-)
-
-if realtime_global_score >= 20:
-    st.success(f"全球市场总分：{realtime_global_score}｜强利好韩国科技股")
-
-elif realtime_global_score >= 8:
-    st.info(f"全球市场总分：{realtime_global_score}｜偏利好")
-
-elif realtime_global_score > -8:
-    st.warning(f"全球市场总分：{realtime_global_score}｜中性震荡")
-
-else:
-    st.error(f"全球市场总分：{realtime_global_score}｜风险偏高")st.markdown("### 🌍 全球市场影响因子")
-        for name, score, comment in global_result["factors"]:
-            if score > 0:
-                st.success(f"{name}：{score:+d}｜{comment}")
-            elif score < 0:
-                st.warning(f"{name}：{score:+d}｜{comment}")
-            else:
-                st.info(f"{name}：{score:+d}｜{comment}")
-
-        with st.expander("查看 Fed / Trump 新闻标题"):
-            st.write("Fed 美联储新闻")
-            for title in global_result["fed_titles"]:
-                st.write(f"- {title}")
-
-            st.write("Trump 特朗普新闻")
-            for title in global_result["trump_titles"]:
-                st.write(f"- {title}")
 
         st.markdown("### 📅 当天价格预测")
         t1, t2, t3 = st.columns(3)
@@ -913,6 +794,20 @@ else:
         n1.metric("预测中位价", f"{result['next_mid']:,}")
         n2.metric("预测低点", f"{result['next_low']:,}")
         n3.metric("预测高点", f"{result['next_high']:,}")
+
+        st.markdown("### 🎯 我的成本回本中心")
+        cost_info = cost_center(result["close"], cost_price)
+
+        if cost_info:
+            cc1, cc2, cc3, cc4 = st.columns(4)
+            cc1.metric("你的成本价", f"{cost_price:,}")
+            cc2.metric("距离成本", f"{cost_info['diff']:,}")
+            cc3.metric("回本需要涨幅", f"{cost_info['need_pct']}%")
+            cc4.metric("回本价", f"{cost_info['break_even']:,}")
+
+            st.write(f"压力位一：{cost_info['pressure_1']:,} 韩元")
+            st.write(f"压力位二：{cost_info['pressure_2']:,} 韩元")
+            st.write(f"压力位三：{cost_info['pressure_3']:,} 韩元")
 
         st.markdown("### 🧠 文星AI总结")
         st.success(ai_summary(result["final_score"], risk_sources, good_sources))
@@ -977,7 +872,7 @@ else:
         st.line_chart(df["Close"].tail(60))
 
 st.markdown("---")
-st.markdown("## 📚 复盘中心 V3.6")
+st.markdown("## 📚 复盘中心 V4")
 
 records = load_predictions(20)
 
