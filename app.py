@@ -307,7 +307,7 @@ def get_yfinance_news(ticker):
 
 def get_global_market_factors():
     def get_realtime_global_dashboard():
-    tickers = {
+        tickers = {
         "道琼斯": "^DJI",
         "纳斯达克": "^IXIC",
         "S&P500": "^GSPC",
