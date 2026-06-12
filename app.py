@@ -77,6 +77,10 @@ KO_NEGATIVE_WORDS = [
 ]
 
 st.title("📈 文星AI交易系统 Pro")
+st.sidebar.metric(
+    "刷新时间",
+    datetime.now().strftime("%H:%M:%S")
+)
 st.caption("V3.6｜全球市场因子｜NVDA｜MU｜NASDAQ｜SOX｜美元韩元｜Fed｜Trump｜复盘中心")
 st.warning("本系统仅供参考，不构成投资建议。股市有风险，操作需谨慎。")
 
@@ -302,6 +306,137 @@ def get_yfinance_news(ticker):
 
 
 def get_global_market_factors():
+    def get_realtime_global_dashboard():
+    tickers = {
+        "道琼斯": "^DJI",
+        "纳斯达克": "^IXIC",
+        "S&P500": "^GSPC",
+        "费城半导体SOX": "^SOX",
+        "纳斯达克100": "^NDX",
+        "美元韩元": "KRW=X",
+        "WTI原油": "CL=F",
+        "美国10年债": "^TNX",
+        "纳斯达克100期货": "NQ=F",
+
+        "NVDA 英伟达": "NVDA",
+        "MU 美光": "MU",
+        "AVGO 博通": "AVGO",
+        "TSLA 特斯拉": "TSLA",
+        "GOOG 谷歌": "GOOG",
+        "META Meta": "META",
+
+        "KORU 韩国3倍ETF": "KORU",
+        "Roundhill Memory ETF": "DRAM",
+        "Samsung DRC": "SMSN.IL",
+        "SK Hynix DRC": "HXSCL.IL",
+    }
+
+    rows = []
+
+    for name, symbol in tickers.items():
+        try:
+            df = yf.download(
+                symbol,
+                period="5d",
+                interval="1d",
+                auto_adjust=False,
+                progress=False
+            )
+
+            if df.empty or len(df) < 2:
+                rows.append([name, symbol, None, None, 0, "数据不足"])
+                continue
+
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = df.columns.get_level_values(0)
+
+            last = safe_float(df["Close"].iloc[-1])
+            prev = safe_float(df["Close"].iloc[-2])
+            change_pct = (last - prev) / prev * 100
+
+            score = 0
+
+            if symbol in ["^SOX", "NVDA", "MU", "AVGO", "DRAM"]:
+                if change_pct >= 2:
+                    score = 10
+                elif change_pct >= 1:
+                    score = 6
+                elif change_pct > 0:
+                    score = 3
+                elif change_pct <= -2:
+                    score = -10
+                elif change_pct <= -1:
+                    score = -6
+                else:
+                    score = -3
+
+            elif symbol in ["^IXIC", "^NDX", "NQ=F", "^GSPC"]:
+                if change_pct >= 1:
+                    score = 6
+                elif change_pct > 0:
+                    score = 3
+                elif change_pct <= -1:
+                    score = -6
+                else:
+                    score = -3
+
+            elif symbol == "KRW=X":
+                if change_pct > 1.5:
+                    score = -4
+                elif change_pct > 0:
+                    score = 2
+                elif change_pct < -1:
+                    score = -2
+
+            elif symbol == "CL=F":
+                if change_pct < -2:
+                    score = 4
+                elif change_pct > 2:
+                    score = -4
+
+            elif symbol == "^TNX":
+                if change_pct > 2:
+                    score = -5
+                elif change_pct < -2:
+                    score = 4
+
+            elif symbol == "HXSCL.IL":
+                if change_pct > 1:
+                    score = 8
+                elif change_pct > 0:
+                    score = 4
+                elif change_pct < -1:
+                    score = -8
+                else:
+                    score = -3
+
+            else:
+                if change_pct > 0:
+                    score = 2
+                elif change_pct < 0:
+                    score = -2
+
+            rows.append([
+                name,
+                symbol,
+                round(last, 2),
+                round(change_pct, 2),
+                score,
+                "利好" if score > 0 else "风险" if score < 0 else "中性"
+            ])
+
+        except Exception:
+            rows.append([name, symbol, None, None, 0, "读取失败"])
+
+    df_result = pd.DataFrame(
+        rows,
+        columns=["名称", "代码", "最新价", "涨跌幅%", "影响分", "判断"]
+    )
+
+    total_score = int(df_result["影响分"].sum())
+    total_score = max(-40, min(40, total_score))
+
+    return df_result, total_score
     factors = []
     total_score = 0
 
@@ -684,8 +819,8 @@ if st.button("开始分析"):
         manual_news_score, manual_good, manual_risk = score_text(manual_news)
 
         global_result = get_global_market_factors()
-        global_score = global_result["score"]
-
+global_df, realtime_global_score = get_realtime_global_dashboard()
+global_score = realtime_global_score
         result = final_prediction(
             df,
             auto_news_score,
@@ -731,7 +866,25 @@ if st.button("开始分析"):
         s4.metric("手动新闻影响", f"{result['manual_score']:+d}")
         s5.metric("全球市场影响", f"{result['global_score']:+d}")
 
-        st.markdown("### 🌍 全球市场影响因子")
+        
+         st.markdown("## 🌍 全球实时市场雷达 V4")
+
+st.dataframe(
+    global_df,
+    use_container_width=True
+)
+
+if realtime_global_score >= 20:
+    st.success(f"全球市场总分：{realtime_global_score}｜强利好韩国科技股")
+
+elif realtime_global_score >= 8:
+    st.info(f"全球市场总分：{realtime_global_score}｜偏利好")
+
+elif realtime_global_score > -8:
+    st.warning(f"全球市场总分：{realtime_global_score}｜中性震荡")
+
+else:
+    st.error(f"全球市场总分：{realtime_global_score}｜风险偏高")st.markdown("### 🌍 全球市场影响因子")
         for name, score, comment in global_result["factors"]:
             if score > 0:
                 st.success(f"{name}：{score:+d}｜{comment}")
