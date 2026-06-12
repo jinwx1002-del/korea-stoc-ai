@@ -819,8 +819,8 @@ if st.button("开始分析"):
         manual_news_score, manual_good, manual_risk = score_text(manual_news)
 
         global_result = get_global_market_factors()
-global_df, realtime_global_score = get_realtime_global_dashboard()
-global_score = realtime_global_score
+        global_df, realtime_global_score = get_realtime_global_dashboard()
+        global_score = realtime_global_score
         result = final_prediction(
             df,
             auto_news_score,
